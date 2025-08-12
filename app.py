@@ -99,8 +99,8 @@ class App(tb.Window):
         top.pack(fill=X, padx=12, pady=8)
 
         tb.Label(top, text="Face detector:", bootstyle=INFO).pack(side=LEFT)
-        self.detector_var = tb.StringVar(value=self._settings.get("detector", os.environ.get("FACE_DETECTOR", "dnn")))
-        self.detector_combo = tb.Combobox(top, textvariable=self.detector_var, values=["dnn", "haar"], width=10, state="readonly")
+        self.detector_var = tb.StringVar(value=self._settings.get("detector", os.environ.get("FACE_DETECTOR", "haar")))
+        self.detector_combo = tb.Combobox(top, textvariable=self.detector_var, values=["haar", "dnn"], width=10, state="readonly")
         self.detector_combo.pack(side=LEFT, padx=8)
 
         tb.Button(top, text="Light", bootstyle=SECONDARY, command=lambda: self._set_theme("flatly")).pack(side=RIGHT, padx=4)
