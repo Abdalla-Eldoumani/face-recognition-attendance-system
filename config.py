@@ -7,6 +7,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATASET_DIR = os.path.join(BASE_DIR, "dataset")
 MODELS_DIR = os.path.join(BASE_DIR, "models")
 ATTENDANCE_DIR = os.path.join(BASE_DIR, "attendance")
+DB_PATH = os.path.join(ATTENDANCE_DIR, "attendance.db")
+THUMBS_DIR = os.path.join(MODELS_DIR, "thumbs")
 
 # Model and label map paths
 MODEL_PATH = os.path.join(MODELS_DIR, "lbph_model.xml")
@@ -67,6 +69,7 @@ def ensure_directories() -> None:
     os.makedirs(ATTENDANCE_DIR, exist_ok=True)
     os.makedirs(DNN_DIR, exist_ok=True)
     os.makedirs(FACEMARK_DIR, exist_ok=True)
+    os.makedirs(THUMBS_DIR, exist_ok=True)
 
 
 def get_attendance_csv_path() -> str:
