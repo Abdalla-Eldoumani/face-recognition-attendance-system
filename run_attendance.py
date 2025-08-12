@@ -3,6 +3,7 @@ import csv
 import json
 import os
 import time
+import sqlite3
 from collections import defaultdict, deque
 from datetime import datetime
 from typing import Dict, Tuple
@@ -27,6 +28,8 @@ def parse_args() -> argparse.Namespace:
         help="LBPH confidence threshold (lower = stricter)",
     )
     parser.add_argument("--frame-skip", type=int, default=config.FRAME_SKIP, help="Process every Nth frame")
+    parser.add_argument("--once-per-day", action="store_true", help="Log at most once per person per day")
+    parser.add_argument("--save-unknown", action="store_true", help="Save cropped faces for unknowns to dataset/_unknown for review")
     return parser.parse_args()
 
 
@@ -55,6 +58,22 @@ def append_attendance(name: str, csv_path: str) -> None:
         writer.writerow([name, datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
 
 
+def append_attendance_db(name: str) -> None:
+    try:
+        os.makedirs(config.ATTENDANCE_DIR, exist_ok=True)
+        conn = sqlite3.connect(config.DB_PATH)
+        try:
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS attendance (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, ts TEXT)"
+            )
+            conn.execute("INSERT INTO attendance (name, ts) VALUES (?, ?)", (name, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
 def main() -> None:
     args = parse_args()
     config.ensure_directories()
@@ -76,10 +95,22 @@ def main() -> None:
         raise RuntimeError(f"Could not open video source: {source_label}")
 
     attendance_csv = config.get_attendance_csv_path()
+    logged_today = set()
+    if args.once_per_day and os.path.exists(attendance_csv):
+        try:
+            with open(attendance_csv, "r", encoding="utf-8") as f:
+                next(f)  # skip header
+                for line in f:
+                    parts = line.strip().split(",")
+                    if parts:
+                        logged_today.add(parts[0])
+        except Exception:
+            pass
 
     # Smoothing and cooldown structures
     recent_names: Dict[int, deque] = defaultdict(lambda: deque(maxlen=config.SMOOTHING_WINDOW))
     last_logged_time: Dict[str, float] = {}
+    unknown_last_saved_time: Dict[int, float] = {}
 
     # Overlay counters
     skipped_blur = 0
@@ -148,10 +179,43 @@ def main() -> None:
 
             if smoothed_name != "Unknown":
                 now_ts = time.time()
-                if smoothed_name not in last_logged_time or (now_ts - last_logged_time[smoothed_name]) >= config.COOLDOWN_SECONDS:
-                    append_attendance(smoothed_name, attendance_csv)
-                    last_logged_time[smoothed_name] = now_ts
-                    print(f"Marked present: {smoothed_name}")
+                if args.once_per_day and smoothed_name in logged_today:
+                    pass
+                else:
+                    if smoothed_name not in last_logged_time or (now_ts - last_logged_time[smoothed_name]) >= config.COOLDOWN_SECONDS:
+                        append_attendance(smoothed_name, attendance_csv)
+                        append_attendance_db(smoothed_name)
+                        last_logged_time[smoothed_name] = now_ts
+                        logged_today.add(smoothed_name)
+                        # Save a small thumbnail for UI and print a structured log line
+                        thumb = frame[max(0, y): y + h, max(0, x): x + w]
+                        if thumb.size != 0:
+                            try:
+                                ts = int(now_ts * 1000)
+                                safe_name = smoothed_name.replace(" ", "_")
+                                thumb_path = os.path.join(config.THUMBS_DIR, f"{safe_name}_{ts}.jpg")
+                                cv2.imwrite(thumb_path, cv2.resize(thumb, (160, 160)))
+                                print(f"Recognized {smoothed_name} CONF={confidence:.1f} THUMB={thumb_path}")
+                            except Exception:
+                                print(f"Recognized {smoothed_name} CONF={confidence:.1f}")
+                        else:
+                            print(f"Recognized {smoothed_name} CONF={confidence:.1f}")
+            else:
+                # Optionally save unknown faces for later review/enrollment
+                if args.save_unknown:
+                    now_ts = time.time()
+                    last_save = unknown_last_saved_time.get(track_key, 0.0)
+                    if (now_ts - last_save) >= 5.0:  # throttle unknown saves per track
+                        unknown_last_saved_time[track_key] = now_ts
+                        try:
+                            os.makedirs(os.path.join(config.DATASET_DIR, "_unknown"), exist_ok=True)
+                            ts = int(now_ts * 1000)
+                            crop = frame[max(0, y): y + h, max(0, x): x + w]
+                            if crop.size != 0:
+                                save_path = os.path.join(config.DATASET_DIR, "_unknown", f"unknown_{ts}.jpg")
+                                cv2.imwrite(save_path, cv2.resize(crop, (config.FACE_SIZE, config.FACE_SIZE)))
+                        except Exception:
+                            pass
 
         if config.DISPLAY_OVERLAY:
             overlay_text = f"Skipped - Blur:{skipped_blur} Exposure:{skipped_exposure} Size:{skipped_size}"
