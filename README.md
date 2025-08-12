@@ -10,6 +10,7 @@ A real-time attendance app with robust face detection and recognition, alignment
 - Enrollment modes: auto/camera/images; auto-train after enroll
 - Tkinter + ttkbootstrap Control Panel (`app.py`) with dark/light themes
 - Attendance CSV per day; export combined CSV/XLSX; simple summaries
+ - UI shows live thumbnails of recognized faces; CLI prints structured logs
 
 ### Setup
 - Create and activate a virtual environment
@@ -29,7 +30,7 @@ pip install numpy==1.26.4 opencv-contrib-python==4.7.0.72
 ```
 
 ### Models
-Models auto-download on first run. Optional manual download (Git Bash):
+Models auto-download on first run (DNN and LBF alignment). Optional manual download (Git Bash):
 ```bash
 # If wget is missing: pacman -S mingw-w64-x86_64-wget or use curl
 mkdir -p models/face_detector models/facemark
@@ -55,6 +56,10 @@ python enroll.py --name "John Doe" --mode camera --num-images 30 --camera 0
 python run_attendance.py --camera 0
 # Or
 python run_attendance.py --video path/to/video.mp4
+# Avoid duplicate daily logs per person
+python run_attendance.py --camera 0 --once-per-day
+# Save unknown face crops for later review/enrollment
+python run_attendance.py --camera 0 --save-unknown
 ```
 - Switch detector (default=dnn)
 ```bash
@@ -70,6 +75,10 @@ export FACE_DETECTOR=haar   # or dnn
 python app.py
 ```
 - Enroll via camera or images, then start attendance. Detector and camera index are persisted in `ui_settings.json`.
+ - Recent recognitions panel updates with name, confidence, and a thumbnail.
+- Review Unknowns tab lets you reassign saved unknown faces to an existing or new person and optionally auto-retrain.
+ - History & Charts tab shows attendance history (CSV-based) and simple charts; presets switch between Performance and Accuracy.
+ - Attendance events are also stored in a local SQLite DB at `attendance/attendance.db` for fast filtering and charting.
 
 ### Configuration
 Edit `config.py` to tune:
@@ -85,6 +94,7 @@ Edit `config.py` to tune:
 ### Project layout
 ```
 models/           # auto/manual downloaded detector & facemark models
+  thumbs/         # thumbnails saved for UI previews
 attendance/       # daily CSV logs
 dataset/          # enrolled faces
 utils/            # detectors, preprocessing, training, reports
@@ -104,6 +114,8 @@ README.md
 - DNN errors: models may be truncated; re-download via the URLs above or set `FACE_DETECTOR=haar` (Haar fallback is automatic on runtime errors).
 - NumPy import errors: pin to `numpy==1.26.4` and `opencv-contrib-python==4.7.0.72`.
 - Camera not found: try a different index (`--camera 1`) or close other apps using the camera.
+ - Missing `cv2.face`: ensure `opencv-contrib-python` is installed (not just `opencv-python`).
+ - Charts not rendering: ensure `matplotlib` is installed and Tkinter is available (included with standard Python installers). If using headless environments, the History & Charts tab will not render.
 
 ## License
 This project is open source and available under the [MIT License](LICENSE).
