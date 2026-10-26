@@ -31,7 +31,12 @@ class HaarFaceDetector:
 
 class DnnFaceDetector:
     def __init__(self, proto_path: str, weights_path: str, confidence_threshold: float = 0.5) -> None:
-        if not os.path.exists(proto_path) or not os.path.exists(weights_path):
+        # A missing or placeholder weights file (the repo ships an empty one) triggers the download.
+        if (
+            not os.path.exists(proto_path)
+            or not os.path.exists(weights_path)
+            or os.path.getsize(weights_path) < 1_000_000
+        ):
             self._ensure_dnn_files(proto_path, weights_path)
         # Validate sizes (catch truncated/HTML downloads)
         if os.path.getsize(weights_path) < 1_000_000 or os.path.getsize(proto_path) < 1_000:
