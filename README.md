@@ -1,121 +1,78 @@
-## Face Recognition Attendance System (Python + OpenCV)
+# Face Recognition Attendance System
 
-A real-time attendance app with robust face detection and recognition, alignment, quality gating, temporal smoothing/cooldown, on-screen overlay, and a modern Tk UI. Enrollment auto-trains the recognizer. Reports can be exported as CSV/XLSX.
+A Python and OpenCV app that recognizes enrolled people from a webcam or video file and logs their attendance to daily CSV files and a local SQLite database. It has a command-line interface and a Tkinter control panel.
 
-### Features
-- DNN or Haar face detector (toggleable), face alignment (Facemark LBF)
-- Quality gating (blur/exposure/size) to skip poor frames
-- Temporal smoothing and per-identity cooldown (no duplicate logs)
-- On-screen overlay of skip counters
-- Enrollment modes: auto/camera/images; auto-train after enroll
-- Tkinter + ttkbootstrap Control Panel (`app.py`) with dark/light themes
-- Attendance CSV per day; export combined CSV/XLSX; simple summaries
- - UI shows live thumbnails of recognized faces; CLI prints structured logs
+## How it works
 
-### Setup
-- Create and activate a virtual environment
+1. **Detect.** Each frame goes through OpenCV's ResNet-10 SSD face detector (the default) or a Haar cascade. If the SSD model fails while running, the app falls back to Haar.
+2. **Align and filter.** Faces are aligned on the eyes with OpenCV's Facemark LBF landmarks. Frames that are blurry, too dark, too bright or too small are skipped, and an overlay counts the skips.
+3. **Recognize.** An LBPH recognizer (`opencv-contrib`) trained on the enrolled images predicts a name. A name is logged only after it appears in several recent frames, and the same person is not logged again within a cooldown period.
+4. **Log.** Each recognition is appended to `attendance/attendance_YYYYMMDD.csv` and to `attendance/attendance.db`.
+
+Enrolling a person saves face crops under `dataset/<name>/` and retrains the recognizer automatically.
+
+## Setup
+
+Python 3 with Tkinter is required (the standard installers include it).
+
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Windows PowerShell: .\.venv\Scripts\Activate.ps1
-```
-- Install dependencies
-```bash
+source .venv/bin/activate        # Git Bash on Windows: source .venv/Scripts/activate
 pip install -r requirements.txt
 ```
 
-If you hit NumPy/OpenCV wheel issues on Windows, pin known-good versions:
-```bash
-pip uninstall -y numpy opencv-python opencv-python-headless opencv-contrib-python
-pip install numpy==1.26.4 opencv-contrib-python==4.7.0.72
-```
+The LBF landmark model is in the repo. The SSD detector weights are not: `models/face_detector/res10_300x300_ssd_iter_140000.caffemodel` is an empty placeholder, and the app refuses to load it. Before using the default detector, delete that file so the app downloads the weights on first run, or download them yourself:
 
-### Models
-Models auto-download on first run (DNN and LBF alignment). Optional manual download (Git Bash):
 ```bash
-# If wget is missing: pacman -S mingw-w64-x86_64-wget or use curl
-mkdir -p models/face_detector models/facemark
-wget -O models/face_detector/deploy.prototxt \
-  https://raw.githubusercontent.com/opencv/opencv/4.x/samples/dnn/face_detector/deploy.prototxt
-wget -O models/face_detector/res10_300x300_ssd_iter_140000.caffemodel \
+curl -L -o models/face_detector/res10_300x300_ssd_iter_140000.caffemodel \
   https://raw.githubusercontent.com/opencv/opencv_3rdparty/4.x/dnn_samples/face_detector/res10_300x300_ssd_iter_140000.caffemodel
-wget -O models/facemark/lbfmodel.yaml \
-  https://github.com/kurnianggoro/GSOC2017/raw/master/data/lbfmodel.yaml
 ```
 
-### Usage (CLI)
-- Enroll and auto-train (auto mode chooses images if provided, else camera)
-```bash
-python enroll.py --name "John Doe" --num-images 30 --camera 0 --auto-snap --delay 0.15
-# Images mode
-python enroll.py --name "John Doe" --mode images --images "photos/john/*.jpg" "more/*.png"
-# Camera mode manual snap (press 's' to capture)
-python enroll.py --name "John Doe" --mode camera --num-images 30 --camera 0
-```
-- Run attendance
-```bash
-python run_attendance.py --camera 0
-# Or
-python run_attendance.py --video path/to/video.mp4
-# Avoid duplicate daily logs per person
-python run_attendance.py --camera 0 --once-per-day
-# Save unknown face crops for later review/enrollment
-python run_attendance.py --camera 0 --save-unknown
-```
-- Switch detector (default=dnn)
-```bash
-# Git Bash
-export FACE_DETECTOR=haar   # or dnn
-# PowerShell
-# $env:FACE_DETECTOR="haar"
-```
+Or skip it and use the Haar detector by setting `FACE_DETECTOR=haar`.
 
-### Usage (UI)
-- Launch the control panel
+## Usage
+
+### Control panel
+
 ```bash
 python app.py
 ```
-- Enroll via camera or images, then start attendance. Detector and camera index are persisted in `ui_settings.json`.
- - Recent recognitions panel updates with name, confidence, and a thumbnail.
-- Review Unknowns tab lets you reassign saved unknown faces to an existing or new person and optionally auto-retrain.
- - History & Charts tab shows attendance history (CSV-based) and simple charts; presets switch between Performance and Accuracy.
- - Attendance events are also stored in a local SQLite DB at `attendance/attendance.db` for fast filtering and charting.
 
-### Configuration
-Edit `config.py` to tune:
-- `RECOGNITION_CONFIDENCE_THRESHOLD`, `FRAME_SKIP`
-- Quality: `QUALITY_BLUR_THRESHOLD`, `QUALITY_EXPOSURE_LOW/HIGH`, `QUALITY_MIN_FACE_SIZE`
-- Smoothing/cooldown: `SMOOTHING_WINDOW`, `SMOOTHING_HITS_REQUIRED`, `COOLDOWN_SECONDS`
-- Overlay: `DISPLAY_OVERLAY`
+The panel has tabs to enroll people (camera or image files), run attendance, browse history with date and person filters and charts, and review saved unknown faces (assign them to a new or existing person and retrain). It also exports all attendance to one CSV or an XLSX file with a per-person summary. The detector choice and camera index are saved in `ui_settings.json`. The panel defaults to the Haar detector.
 
-### Reports
-- Attendance CSVs are saved under `attendance/attendance_YYYYMMDD.csv`.
-- In the UI, use Export to save combined CSV/XLSX; or programmatically via `utils/reports.py`.
+### Command line
 
-### Project layout
-```
-models/           # auto/manual downloaded detector & facemark models
-  thumbs/         # thumbnails saved for UI previews
-attendance/       # daily CSV logs
-dataset/          # enrolled faces
-utils/            # detectors, preprocessing, training, reports
-  face_detector.py
-  preprocess.py
-  training.py
-  reports.py
-config.py
-enroll.py
-run_attendance.py
-app.py
-requirements.txt
-README.md
+Enroll a person, then run attendance. Press `q` to quit a camera window.
+
+```bash
+# Capture 30 images from camera 0 automatically
+python enroll.py --name "Jane Doe" --num-images 30 --camera 0 --auto-snap
+# Without --auto-snap, press s to capture each image
+# Enroll from image files instead
+python enroll.py --name "Jane Doe" --mode images --images "photos/jane/*.jpg"
+
+python run_attendance.py --camera 0
+python run_attendance.py --video path/to/video.mp4
 ```
 
-### Troubleshooting
-- DNN errors: models may be truncated; re-download via the URLs above or set `FACE_DETECTOR=haar` (Haar fallback is automatic on runtime errors).
-- NumPy import errors: pin to `numpy==1.26.4` and `opencv-contrib-python==4.7.0.72`.
-- Camera not found: try a different index (`--camera 1`) or close other apps using the camera.
- - Missing `cv2.face`: ensure `opencv-contrib-python` is installed (not just `opencv-python`).
- - Charts not rendering: ensure `matplotlib` is installed and Tkinter is available (included with standard Python installers). If using headless environments, the History & Charts tab will not render.
+Useful flags for `run_attendance.py`: `--once-per-day` logs each person at most once a day, `--save-unknown` saves unrecognized faces to `dataset/_unknown/` for review, `--threshold` sets the LBPH confidence cutoff (lower is stricter, default 60), and `--frame-skip N` processes every Nth frame.
+
+Set the detector with an environment variable, for example `export FACE_DETECTOR=haar` (or `set FACE_DETECTOR=haar` in Command Prompt).
+
+## Configuration
+
+`config.py` holds the tuning values: the recognition threshold, frame skip, quality thresholds (blur, exposure, minimum face size), smoothing window and hits required, cooldown in seconds, and whether to draw the overlay.
+
+## Troubleshooting
+
+- `cv2.face` is missing: install `opencv-contrib-python`, not `opencv-python`.
+- NumPy or OpenCV import errors on Windows: install `numpy==1.26.4` and `opencv-contrib-python==4.7.0.72`.
+- Camera not found: try another index (`--camera 1`) or close other apps using the camera.
+
+## Limitations
+
+LBPH is a classical method. It works for a small group enrolled under similar lighting and camera conditions, and it is less accurate than deep-learning face embeddings. The system does no liveness check, so a photo of an enrolled person can be recognized as that person.
 
 ## License
-This project is open source and available under the [MIT License](LICENSE).
+
+[MIT](LICENSE)
