@@ -21,14 +21,7 @@ source .venv/bin/activate        # Git Bash on Windows: source .venv/Scripts/act
 pip install -r requirements.txt
 ```
 
-The LBF landmark model is in the repo. The SSD detector weights are not: `models/face_detector/res10_300x300_ssd_iter_140000.caffemodel` is an empty placeholder, and the app refuses to load it. Before using the default detector, delete that file so the app downloads the weights on first run, or download them yourself:
-
-```bash
-curl -L -o models/face_detector/res10_300x300_ssd_iter_140000.caffemodel \
-  https://raw.githubusercontent.com/opencv/opencv_3rdparty/4.x/dnn_samples/face_detector/res10_300x300_ssd_iter_140000.caffemodel
-```
-
-Or skip it and use the Haar detector by setting `FACE_DETECTOR=haar`.
+The LBF landmark model is in the repo. The SSD detector weights (about 10 MB) are not: the app downloads them from OpenCV's model repository the first time the default detector runs, so that first run needs an internet connection. To work offline, use the Haar detector by setting `FACE_DETECTOR=haar`.
 
 ## Usage
 
